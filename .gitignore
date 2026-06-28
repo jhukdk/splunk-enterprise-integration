@@ -1,0 +1,29 @@
+# --- Terraform / infra secrets & state (never commit) ---
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+crash.*.log
+
+# tfvars hold real values (CIDRs, names) and may carry secrets — never commit,
+# EXCEPT the checked-in templates that show the expected shape.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# --- Splunk container config that can hold the admin password / HEC token ---
+docker/default.yml
+!docker/default.yml.example
+
+# --- AWS credentials ---
+.aws/
+
+# --- Environment / secrets ---
+.env
+.env.*
+*.env
+*.pem
+
+# --- OS / editor cruft ---
+.DS_Store
+*.swp

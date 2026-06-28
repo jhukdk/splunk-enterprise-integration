@@ -6,7 +6,7 @@ Running log of completed roadmap steps. Append a short, dated note as each step 
 
 | # | Step | Status |
 |---|------|--------|
-| 1 | Backend + providers | ⬜ Not started |
+| 1 | Backend + providers | ✅ Done |
 | 2 | Networking (VPC / subnet / SG) | ⬜ Not started |
 | 3 | Splunk host (EC2 + gp3 EBS + Docker) | ⬜ Not started |
 | 4 | Logs bucket (private S3 + ACL for CF) | ⬜ Not started |
@@ -25,3 +25,13 @@ Legend: ⬜ Not started · 🟡 In progress · ✅ Done
 - Repo created with `CLAUDE.md` project instructions.
 - Authored `README.md` (overview, architecture, repo boundaries, roadmap, security guardrails) and this `PROGRESS.md`.
 - No AWS infrastructure provisioned yet — next up is **step 1: backend + providers**.
+
+### 2026-06-27 — Step 1: backend + providers
+- Read sibling `blog-migration` to pull shared facts: account `877995959706`, region `us-east-1`, state bucket `jhuk-tech-tfstate-877995959706`, TF `>= 1.10`, AWS provider `~> 6.50`, naming `jhuk-tech-<purpose>-<accountid>`, tags `{Project, ManagedBy}`.
+- Added `infra/backend.tf` — reuses the shared state bucket under a **new key** `splunk/terraform.tfstate` (blog-migration uses `jhuk/...`), `use_lockfile = true` (S3-native locking, no DynamoDB).
+- Added `infra/providers.tf` — single `us-east-1` provider with `default_tags`; plus `aws_caller_identity` / `aws_region` data sources so the account ID is never hardcoded.
+- Added `infra/variables.tf` — `aws_region`, `project`, `tags`.
+- Added repo `.gitignore` (state, `*.tfvars` except `*.example`, `docker/default.yml` except example, `.terraform/`, secrets, OS cruft); `.terraform.lock.hcl` is intentionally committed.
+- Validated locally: `terraform fmt -check` clean, `terraform init -backend=false` + `terraform validate` → **Success** (no backend access, nothing applied).
+- Deferred to later steps: `terraform_remote_state` data source against blog-migration (needs a CloudFront-ARN output added there in the Step 7 PR); the deterministic logs-bucket name variable (Step 4).
+- **Next up: step 2 — networking (default vs custom VPC, subnet, security group).**
