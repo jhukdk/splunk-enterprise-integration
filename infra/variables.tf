@@ -95,3 +95,36 @@ variable "admin_password_parameter_name" {
   type        = string
   default     = "/jhuk-tech/splunk/admin_password"
 }
+
+# --- Step 4: CloudFront logs bucket -----------------------------------------
+
+variable "logs_bucket_name" {
+  description = <<-EOT
+    Exact name of the CloudFront logs bucket, shared verbatim with
+    blog-migration's logging_config. Leave empty to derive the deterministic
+    name "<project>-cf-logs-<accountid>" (both repos compute the same value).
+    Set explicitly only if you need a different name in both places.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "logs_retention_days" {
+  description = <<-EOT
+    Days to keep CloudFront log objects before lifecycle-expiring them. Splunk
+    ingests each object within minutes via the SQS path, so a short window is
+    fine; 90 leaves room to re-ingest or investigate.
+  EOT
+  type        = number
+  default     = 90
+}
+
+variable "cloudfront_log_delivery_canonical_id" {
+  description = <<-EOT
+    Canonical user ID of AWS's CloudFront log-delivery account (awslogsdelivery),
+    granted FULL_CONTROL via bucket ACL so legacy standard logging can write.
+    This is a fixed, AWS-published value — the same for every customer.
+  EOT
+  type        = string
+  default     = "c4c1ede66af53448b93c283ce9448c4ba468c9432aa01d700d3878632f77d2d0"
+}

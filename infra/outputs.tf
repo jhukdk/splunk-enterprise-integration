@@ -32,3 +32,18 @@ output "splunk_role_arn" {
   description = "ARN of the Splunk instance role (extended with SQS/S3 access in Step 6)."
   value       = aws_iam_role.splunk.arn
 }
+
+output "logs_bucket_name" {
+  description = "Name of the CloudFront logs bucket — set this verbatim in blog-migration's logging_config (Step 7)."
+  value       = aws_s3_bucket.logs.bucket
+}
+
+output "logs_bucket_arn" {
+  description = "ARN of the CloudFront logs bucket (used by the S3 notification + Splunk S3-read policy in later steps)."
+  value       = aws_s3_bucket.logs.arn
+}
+
+output "logs_bucket_domain_name" {
+  description = "Regional domain name of the logs bucket (the bucket target CloudFront logging_config expects)."
+  value       = aws_s3_bucket.logs.bucket_domain_name
+}

@@ -9,7 +9,7 @@ Running log of completed roadmap steps. Append a short, dated note as each step 
 | 1 | Backend + providers | ✅ Done |
 | 2 | Networking (VPC / subnet / SG) | ✅ Done |
 | 3 | Splunk host (EC2 + gp3 EBS + Docker) | ✅ Applied — Splunk Web up |
-| 4 | Logs bucket (private S3 + ACL for CF) | ⬜ Not started |
+| 4 | Logs bucket (private S3 + ACL for CF) | 🟡 Code complete — not applied |
 | 5 | Ingestion plumbing (S3 → SNS → SQS + DLQ) | ⬜ Not started |
 | 6 | Instance role (least-privilege IAM + SSM) | ⬜ Not started |
 | 7 | blog-migration PR (`logging_config`) | ⬜ Not started |
@@ -59,3 +59,11 @@ Legend: ⬜ Not started · 🟡 In progress · ✅ Done
 - ⚠️ Next `terraform apply` will **replace the instance** (user_data text changed + `user_data_replace_on_change=true`); EBS data volume persists across the replace, so it doubles as an EBS-persistence test. New instance will get a new public IP.
 - Still to verify for full phase-1 DoD: EBS persistence across a restart, and (later steps) events landing in `index=cloudfront`.
 - **Next up: step 4 — logs bucket** (private S3 + lifecycle + ACL for CloudFront standard logging).
+
+### 2026-06-29 — Step 4: CloudFront logs bucket (code complete, NOT applied)
+- Added `infra/logs_bucket.tf`: private S3 bucket for the blog's CloudFront access logs. Deterministic name `local.logs_bucket_name` = `<project>-cf-logs-<accountid>` (= `jhuk-tech-cf-logs-877995959706`) so blog-migration can target it without a name chicken-and-egg.
+- **The ACL gotcha (the whole point of this step):** CloudFront *legacy standard logging* delivers files as a separate AWS account (`awslogsdelivery`) and grants us ownership via a **bucket ACL**. Modern buckets default to `BucketOwnerEnforced` which DISABLES ACLs → delivery fails **silently**. So: `aws_s3_bucket_ownership_controls` = `BucketOwnerPreferred` (re-enables ACLs) + `aws_s3_bucket_acl` granting `FULL_CONTROL` to the awslogsdelivery canonical ID (`c4c1ede6…d2d0`) alongside our own. `aws_s3_bucket_acl` `depends_on` the ownership controls.
+- Other gotchas handled: **SSE-S3 (AES256) only** — CloudFront standard logs don't support SSE-KMS; bucket stays fully private (`aws_s3_bucket_public_access_block` all-true — the awslogsdelivery grant is account-scoped, not public); lifecycle rule expires logs after `logs_retention_days` (90) + aborts stale multipart uploads.
+- New vars: `logs_bucket_name` (empty ⇒ derive), `logs_retention_days`, `cloudfront_log_delivery_canonical_id`. New outputs: `logs_bucket_name`, `logs_bucket_arn`, `logs_bucket_domain_name` (the last feeds blog-migration's `logging_config` in Step 7).
+- Validated: `terraform fmt -check -recursive` clean, `terraform validate` → Success. **Nothing applied.** S3 cost is negligible; no ports/SG changes; doesn't touch blog-migration.
+- **Next up: step 5 — ingestion plumbing** (S3 ObjectCreated → SNS → SQS + DLQ, with the resource policies wiring each hop).
