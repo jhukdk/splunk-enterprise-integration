@@ -8,7 +8,7 @@ Running log of completed roadmap steps. Append a short, dated note as each step 
 |---|------|--------|
 | 1 | Backend + providers | ✅ Done |
 | 2 | Networking (VPC / subnet / SG) | ✅ Done |
-| 3 | Splunk host (EC2 + gp3 EBS + Docker) | 🟡 Code complete — not applied |
+| 3 | Splunk host (EC2 + gp3 EBS + Docker) | ✅ Applied — Splunk Web up |
 | 4 | Logs bucket (private S3 + ACL for CF) | ⬜ Not started |
 | 5 | Ingestion plumbing (S3 → SNS → SQS + DLQ) | ⬜ Not started |
 | 6 | Instance role (least-privilege IAM + SSM) | ⬜ Not started |
@@ -55,4 +55,7 @@ Legend: ⬜ Not started · 🟡 In progress · ✅ Done
 - New vars: `instance_type`, `splunk_data_volume_gb`, `splunk_image`, `admin_password_parameter_name`. New outputs: `splunk_instance_id`, `splunk_public_ip`, `splunk_web_url`, `splunk_role_arn`.
 - Validated: `terraform fmt -check -recursive` clean, `terraform validate` → Success. **Nothing applied — first paid step; awaiting maintainer to set the SSM password + tfvars, then review `terraform plan` before apply.**
 - **Pre-apply checklist (maintainer):** (1) `aws ssm put-parameter --name /jhuk-tech/splunk/admin_password --type SecureString --value '...' --region us-east-1`; (2) create gitignored `infra/terraform.tfvars` with real `admin_cidrs` (your IP /32); (3) `terraform init` (real backend) → `terraform plan` → review → `apply`.
+- **2026-06-29 (applied):** maintainer ran `terraform apply`. Instance `i-03d44c59678c305d0` (m7i-flex.large) came up healthy, SSM Online, EBS volume mounted at `/opt/splunk-data` (etc/var owned by 41812). **Splunk container initially crash-looped: "License not accepted."** Splunk **10.x** requires a second acceptance env var, `SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com`, in addition to `SPLUNK_START_ARGS=--accept-license` (9.x needed only the latter). Fixed user-data + docker/README to set both; hot-patched the live container via SSM so Splunk came up without an instance replace. **Splunk Web now serving on :8000 (HTTP 303 → login), reachable from `admin_cidrs` at http://3.236.176.220:8000.** The SGT fix is on branch/PR for the merged-code source of truth.
+- ⚠️ Next `terraform apply` will **replace the instance** (user_data text changed + `user_data_replace_on_change=true`); EBS data volume persists across the replace, so it doubles as an EBS-persistence test. New instance will get a new public IP.
+- Still to verify for full phase-1 DoD: EBS persistence across a restart, and (later steps) events landing in `index=cloudfront`.
 - **Next up: step 4 — logs bucket** (private S3 + lifecycle + ACL for CloudFront standard logging).

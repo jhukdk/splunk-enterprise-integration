@@ -10,6 +10,7 @@ documents what it runs and why.
 ```
 docker run -d --name splunk --restart unless-stopped --hostname splunk \
   -p 8000:8000 \
+  -e SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com \
   -e SPLUNK_START_ARGS=--accept-license \
   -e SPLUNK_PASSWORD="<fetched from SSM at boot>" \
   -v /opt/splunk-data/var:/opt/splunk/var \   # indexed data  (persistent)
@@ -20,7 +21,9 @@ docker run -d --name splunk --restart unless-stopped --hostname splunk \
 - **Image** — official `splunk/splunk`, pinned by tag (the `splunk_image`
   variable). Its entrypoint runs `splunk-ansible` on first boot to install and
   configure Splunk into the mounted `etc`.
-- **`SPLUNK_START_ARGS=--accept-license`** — required, or the container exits.
+- **`SPLUNK_GENERAL_TERMS` + `SPLUNK_START_ARGS=--accept-license`** — both are
+  required on Splunk 10.x or the container exits on every boot ("License not
+  accepted"). 9.x needed only the latter; 10.x added the General Terms gate.
 - **`SPLUNK_PASSWORD`** — the initial `admin` password. Read from SSM Parameter
   Store at boot using the instance role; never baked into the image or state.
 - **Volumes** — both `/opt/splunk/var` and `/opt/splunk/etc` are bind-mounted to
