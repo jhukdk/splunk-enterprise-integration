@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# ---------------------------------------------------------------------------
+# Splunk host bootstrap (EC2 user-data, runs once at first boot as root).
+#
+# Rendered by Terraform via templatefile(); the template vars are injected by
+# ec2.tf. All shell variables use $VAR. Output is logged to
+# /var/log/user-data.log so you can `sudo cat` it over an SSM session.
+#
+# Steps: install Docker -> mount the persistent EBS data volume -> fetch the
+# admin password from SSM -> run the Splunk container with data + config on EBS.
+# ---------------------------------------------------------------------------
+set -euo pipefail
+exec > >(tee -a /var/log/user-data.log) 2>&1
+echo "=== Splunk bootstrap starting: $(date -u) ==="
+
+REGION="${aws_region}"
+PARAM_NAME="${admin_password_parameter_name}"
+SPLUNK_IMAGE="${splunk_image}"
+DATA_MOUNT="/opt/splunk-data"
+# The official splunk/splunk image runs as this uid:gid; the mounted dirs must be
+# owned by it or first-boot provisioning fails with permission errors.
+SPLUNK_UID=41812
+SPLUNK_GID=41812
+
+# --- 1. Docker -------------------------------------------------------------
+dnf update -y
+dnf install -y docker
+systemctl enable --now docker
+
+# --- 2. Persistent EBS data volume ----------------------------------------
+# Find the data disk = the only whole disk that isn't the root disk. On Nitro
+# (t3) the volume we asked for as /dev/sdf shows up as a separate NVMe device.
+ROOT_DISK=$(lsblk -dpno NAME,MOUNTPOINT | awk '$2=="/"{print $1}')
+if [ -z "$ROOT_DISK" ]; then
+  # Root is usually a partition (e.g. nvme0n1p1); derive its parent disk.
+  ROOT_PART=$(findmnt -n -o SOURCE /)
+  ROOT_DISK=$(lsblk -no PKNAME "$ROOT_PART" | head -n1)
+  ROOT_DISK="/dev/$ROOT_DISK"
+fi
+
+DATA_DISK=""
+for dev in $(lsblk -dpno NAME); do
+  [ "$dev" = "$ROOT_DISK" ] && continue
+  DATA_DISK="$dev"
+  break
+done
+
+if [ -z "$DATA_DISK" ]; then
+  echo "FATAL: could not find the EBS data volume" >&2
+  exit 1
+fi
+echo "Data volume: $DATA_DISK (root: $ROOT_DISK)"
+
+# Format only if empty, so a re-run / instance replacement keeps existing data.
+if ! blkid "$DATA_DISK" >/dev/null 2>&1; then
+  echo "No filesystem on $DATA_DISK — creating xfs"
+  mkfs -t xfs "$DATA_DISK"
+fi
+
+mkdir -p "$DATA_MOUNT"
+DATA_UUID=$(blkid -s UUID -o value "$DATA_DISK")
+# Persist the mount across reboots, keyed by UUID (device names can shuffle).
+if ! grep -q "$DATA_UUID" /etc/fstab; then
+  echo "UUID=$DATA_UUID $DATA_MOUNT xfs defaults,nofail 0 2" >> /etc/fstab
+fi
+mount -a
+
+# Splunk's two persisted trees: var = indexed data, etc = configuration.
+mkdir -p "$DATA_MOUNT/var" "$DATA_MOUNT/etc"
+chown -R "$SPLUNK_UID:$SPLUNK_GID" "$DATA_MOUNT/var" "$DATA_MOUNT/etc"
+
+# --- 3. Admin password from SSM Parameter Store ---------------------------
+# Fetched with the instance role at boot; never stored in Terraform or on disk.
+SPLUNK_PASSWORD=$(aws ssm get-parameter \
+  --name "$PARAM_NAME" \
+  --with-decryption \
+  --region "$REGION" \
+  --query 'Parameter.Value' \
+  --output text)
+
+if [ -z "$SPLUNK_PASSWORD" ] || [ "$SPLUNK_PASSWORD" = "None" ]; then
+  echo "FATAL: admin password parameter $PARAM_NAME is empty/missing." >&2
+  echo "Create it, then reboot or re-run docker:  aws ssm put-parameter ..." >&2
+  exit 1
+fi
+
+# --- 4. Splunk container ---------------------------------------------------
+# Idempotent: replace any existing container so a re-run picks up new config.
+docker rm -f splunk >/dev/null 2>&1 || true
+docker run -d \
+  --name splunk \
+  --restart unless-stopped \
+  --hostname splunk \
+  -p 8000:8000 \
+  -e SPLUNK_START_ARGS=--accept-license \
+  -e SPLUNK_PASSWORD="$SPLUNK_PASSWORD" \
+  -v "$DATA_MOUNT/var:/opt/splunk/var" \
+  -v "$DATA_MOUNT/etc:/opt/splunk/etc" \
+  "$SPLUNK_IMAGE"
+
+echo "=== Splunk bootstrap finished: $(date -u) ==="
+echo "Splunk Web will be up on :8000 in a few minutes (first-boot provisioning)."
