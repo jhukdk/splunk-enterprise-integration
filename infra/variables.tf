@@ -51,12 +51,14 @@ variable "tags" {
 
 variable "instance_type" {
   description = <<-EOT
-    EC2 instance type for the Splunk host. t3.medium (2 vCPU / 4 GB) is below
-    Splunk's reference spec but fine for this tiny CloudFront volume. Bump to
-    t3.large if search feels sluggish — it's a one-line change + reboot.
+    EC2 instance type for the Splunk host. m7i-flex.large (2 vCPU / 8 GB) is
+    free-tier-eligible, so it launches under the AWS Free plan (which blocks
+    non-eligible types like t3.medium outright) and draws down free credits
+    rather than billing. 8 GB suits Splunk better than the 4 GB we first planned.
+    On a paid plan, t3.medium (~$34/mo all-in) is the cheaper long-term choice.
   EOT
   type        = string
-  default     = "t3.medium"
+  default     = "m7i-flex.large"
 }
 
 variable "splunk_data_volume_gb" {
