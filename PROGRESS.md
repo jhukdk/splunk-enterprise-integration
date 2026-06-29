@@ -8,7 +8,7 @@ Running log of completed roadmap steps. Append a short, dated note as each step 
 |---|------|--------|
 | 1 | Backend + providers | ✅ Done |
 | 2 | Networking (VPC / subnet / SG) | ✅ Done |
-| 3 | Splunk host (EC2 + gp3 EBS + Docker) | ⬜ Not started |
+| 3 | Splunk host (EC2 + gp3 EBS + Docker) | 🟡 Code complete — not applied |
 | 4 | Logs bucket (private S3 + ACL for CF) | ⬜ Not started |
 | 5 | Ingestion plumbing (S3 → SNS → SQS + DLQ) | ⬜ Not started |
 | 6 | Instance role (least-privilege IAM + SSM) | ⬜ Not started |
@@ -44,3 +44,15 @@ Legend: ⬜ Not started · 🟡 In progress · ✅ Done
 - Outputs: `vpc_id`, `public_subnet_id`, `splunk_security_group_id`.
 - Validated: `terraform fmt -check` clean, `terraform validate` → Success. Nothing applied.
 - **Next up: step 3 — Splunk host (EC2 + gp3 EBS + Docker user-data, admin password from Secrets Manager/SSM).** First paid step; will show the plan and the SSM-vs-SSH / instance-size choices before any apply.
+
+### 2026-06-29 — Step 3: Splunk host (code complete, NOT applied)
+- User chose: **SSM Session Manager only** (port 22 stays closed), **admin password in SSM Parameter Store SecureString**, **30 GB gp3** separate data volume.
+- **Instance type: `m7i-flex.large`** (2 vCPU / 8 GB). First `apply` attempt with `t3.medium` failed — the account is on the AWS **Free plan**, which rejects non-free-tier-eligible types at `RunInstances` (`InvalidParameterCombination`). `m7i-flex.large` is free-tier-eligible, x86_64 (AMI unchanged), and 8 GB > the 4 GB t3.medium plan. On a paid plan, t3.medium (~$34/mo all-in) is the cheaper long-term option; flex types list at ~$66–74/mo but draw down free credits ($0 out of pocket until they run out).
+- Added `infra/iam.tf`: EC2 instance **role + instance profile**. Minimal for now — `AmazonSSMManagedInstanceCore` (Session Manager shell) + a least-privilege inline policy reading only the admin-password SSM parameter (+ `kms:Decrypt` scoped via `kms:ViaService=ssm`). **Note the deviation from the roadmap:** the role must exist at launch for SSM/password-fetch, so it lands here in Step 3; **Step 6 extends this same role** with SQS-consume + S3-read.
+- Added `infra/ec2.tf`: AL2023 AMI via public SSM parameter (no hardcoded AMI); `aws_instance` (t3.medium, in the public subnet + splunk SG, instance profile attached, **IMDSv2 required**, 20 GB encrypted gp3 root, `user_data_replace_on_change=true`); separate **30 GB encrypted gp3** `aws_ebs_volume` + `aws_volume_attachment` at `/dev/sdf`.
+- Added `scripts/user-data.sh.tftpl`: installs Docker; detects + (idempotently) formats xfs + mounts the EBS data volume at `/opt/splunk-data` by UUID in fstab; `chown 41812:41812`; fetches admin password from SSM; `docker run splunk/splunk:10.2.4` with `var`+`etc` bind-mounted onto EBS, only port 8000 published.
+- Added `docker/README.md` documenting the container (user-data is authoritative; no separate compose to avoid drift).
+- New vars: `instance_type`, `splunk_data_volume_gb`, `splunk_image`, `admin_password_parameter_name`. New outputs: `splunk_instance_id`, `splunk_public_ip`, `splunk_web_url`, `splunk_role_arn`.
+- Validated: `terraform fmt -check -recursive` clean, `terraform validate` → Success. **Nothing applied — first paid step; awaiting maintainer to set the SSM password + tfvars, then review `terraform plan` before apply.**
+- **Pre-apply checklist (maintainer):** (1) `aws ssm put-parameter --name /jhuk-tech/splunk/admin_password --type SecureString --value '...' --region us-east-1`; (2) create gitignored `infra/terraform.tfvars` with real `admin_cidrs` (your IP /32); (3) `terraform init` (real backend) → `terraform plan` → review → `apply`.
+- **Next up: step 4 — logs bucket** (private S3 + lifecycle + ACL for CloudFront standard logging).
