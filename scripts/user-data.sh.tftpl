@@ -92,6 +92,7 @@ docker run -d \
   --restart unless-stopped \
   --hostname splunk \
   -p 8000:8000 \
+  -e SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com \
   -e SPLUNK_START_ARGS=--accept-license \
   -e SPLUNK_PASSWORD="$SPLUNK_PASSWORD" \
   -v "$DATA_MOUNT/var:/opt/splunk/var" \
