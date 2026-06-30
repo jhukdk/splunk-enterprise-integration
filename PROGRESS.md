@@ -9,12 +9,12 @@ Running log of completed roadmap steps. Append a short, dated note as each step 
 | 1 | Backend + providers | ✅ Done |
 | 2 | Networking (VPC / subnet / SG) | ✅ Done |
 | 3 | Splunk host (EC2 + gp3 EBS + Docker) | ✅ Applied — Splunk Web up |
-| 4 | Logs bucket (private S3 + ACL for CF) | 🟡 Code complete — not applied |
-| 5 | Ingestion plumbing (S3 → SNS → SQS + DLQ) | 🟡 Code complete — not applied |
-| 6 | Instance role (least-privilege IAM + SSM) | 🟡 Code complete — not applied |
-| 7 | blog-migration PR (`logging_config`) | 🟡 PR proposed (blog-migration #33) |
-| 8 | Configure Splunk (AWS add-on, index, input) | 🟡 Runbook ready — manual UI step |
-| 9 | Verify (traffic → `index=cloudfront`) | 🟡 Runbook ready — manual verification |
+| 4 | Logs bucket (private S3 + ACL for CF) | ✅ Applied |
+| 5 | Ingestion plumbing (S3 → SNS → SQS + DLQ) | ✅ Applied |
+| 6 | Instance role (least-privilege IAM + SSM) | ✅ Applied |
+| 7 | blog-migration PR (`logging_config`) | ✅ Merged + applied (blog-migration #33) |
+| 8 | Configure Splunk (AWS add-on, index, input) | 🟡 **NEXT — manual UI step (not done)** |
+| 9 | Verify (traffic → `index=cloudfront`) | ⬜ After Step 8 |
 | 10 | (Optional) WAF + CloudTrail | ⬜ Not started |
 
 Legend: ⬜ Not started · 🟡 In progress · ✅ Done
@@ -103,3 +103,10 @@ Legend: ⬜ Not started · 🟡 In progress · ✅ Done
 - Pipeline-health checks (ingest lag, `_internal source=*splunk_ta_aws*` errors, SQS/DLQ depth) and the **EBS-persistence test** (container restart = quick; instance replacement = full proof that data lives on the EBS volume).
 - Phase-1 definition-of-done checklist: events within minutes, fields extracted, survives restart, no static creds.
 - Docs only; no infra. **Roadmap code/docs all complete through Step 9.** Remaining is operational (maintainer): apply Steps 4–6, apply blog-migration #33, run Step 8 runbook, then verify with Step 9. Step 10 (WAF→HEC + CloudTrail) is optional/future.
+
+### 2026-06-30 — Operational status: infra applied, Step 8 is the only thing left
+- **Applied** Steps 4–6 (logs bucket, SNS/SQS/DLQ, role ingest policy incl. `sqs:ListQueues`). The apply **replaced the instance** (user_data had changed): now **`i-0b281283ba85f2793`**, public IP **`98.84.33.4`** → **Splunk Web at http://98.84.33.4:8000** (old `i-03d44c59678c305d0` gone; EBS data volume persisted across the swap).
+- **Merged + applied blog-migration #33** — CloudFront (dist `EBSGZL0OM8XYI`) standard logging is on, writing to the bucket under `cloudfront/`.
+- **Pipeline proven through SQS:** a real log object landed (`cloudfront/EBSGZL0OM8XYI.2026-06-30-00.*.gz`) and a message is sitting in the main queue (DLQ empty) — `S3 → SNS → SQS` works end to end.
+- **➡️ NEXT (manual, not done):** run `docs/step-8-configure-splunk.md` in Splunk Web — install the Splunk Add-on for AWS, create `index=cloudfront`, add the CloudFront Access Log → SQS-Based S3 input (auth = auto-discovered EC2 role; SQS `jhuk-tech-cf-logs`; SNS Signature Validation **off**). The new instance currently has **no add-on, no `cloudfront` index, no input** — which is why the queued message is unconsumed. Then verify via `docs/step-9-verify.md`.
+- Also open elsewhere: **blog-migration PR #34** — a hiring-manager blog post about this architecture (`draft:false`, publishes on merge).
