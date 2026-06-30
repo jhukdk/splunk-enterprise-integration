@@ -11,7 +11,7 @@ Running log of completed roadmap steps. Append a short, dated note as each step 
 | 3 | Splunk host (EC2 + gp3 EBS + Docker) | ✅ Applied — Splunk Web up |
 | 4 | Logs bucket (private S3 + ACL for CF) | 🟡 Code complete — not applied |
 | 5 | Ingestion plumbing (S3 → SNS → SQS + DLQ) | 🟡 Code complete — not applied |
-| 6 | Instance role (least-privilege IAM + SSM) | ⬜ Not started |
+| 6 | Instance role (least-privilege IAM + SSM) | 🟡 Code complete — not applied |
 | 7 | blog-migration PR (`logging_config`) | ⬜ Not started |
 | 8 | Configure Splunk (AWS add-on, index, input) | ⬜ Not started |
 | 9 | Verify (traffic → `index=cloudfront`) | ⬜ Not started |
@@ -76,3 +76,10 @@ Legend: ⬜ Not started · 🟡 In progress · ✅ Done
 - New var `sqs_max_receive_count` (5). New outputs: `sns_topic_arn`, `sqs_queue_url`, `sqs_queue_arn` (→ Step 6 IAM), `sqs_dlq_url`.
 - Validated: `terraform fmt -check -recursive` clean, `terraform validate` → Success. **Nothing applied.** SNS/SQS at this volume is effectively free; no ports/SG; doesn't touch blog-migration.
 - **Next up: step 6 — instance role** (extend the existing `jhuk-tech-splunk-role` with least-privilege SQS-consume on the main queue + S3 read on the logs bucket).
+
+### 2026-06-29 — Step 6: instance role ingest permissions (code complete, NOT applied)
+- Extended the existing `jhuk-tech-splunk-role` (created in Step 3) with a new inline policy `jhuk-tech-splunk-ingest` in `infra/iam.tf` — no new role, no instance replacement (applies live to the running host).
+- **Least privilege, exact ARNs:** SQS `ReceiveMessage`/`DeleteMessage`/`ChangeMessageVisibility`/`GetQueueAttributes`/`GetQueueUrl` on the **main queue only** (`aws_sqs_queue.cf_logs.arn`) — no SendMessage, no DLQ, no account-wide ListQueues. S3 read-only: `GetObject` on `<logs-bucket>/*`, `ListBucket`+`GetBucketLocation` on the bucket. No `kms:Decrypt` (bucket is SSE-S3, not KMS). Nothing touches the blog content bucket.
+- Validated: `terraform fmt -check -recursive` clean, `terraform validate` → Success. **Nothing applied.** Free; no ports/SG; doesn't touch blog-migration.
+- After this, the full pull pipeline is permission-complete; it just needs CloudFront to actually write logs (Step 7) and the Splunk-side input configured (Step 8).
+- **Next up: step 7 — blog-migration PR** (add `logging_config` to the CloudFront distribution → this repo's logs bucket; separate repo, maintainer applies).
