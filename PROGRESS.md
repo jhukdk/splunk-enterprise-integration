@@ -14,7 +14,7 @@ Running log of completed roadmap steps. Append a short, dated note as each step 
 | 6 | Instance role (least-privilege IAM + SSM) | 🟡 Code complete — not applied |
 | 7 | blog-migration PR (`logging_config`) | 🟡 PR proposed (blog-migration #33) |
 | 8 | Configure Splunk (AWS add-on, index, input) | 🟡 Runbook ready — manual UI step |
-| 9 | Verify (traffic → `index=cloudfront`) | ⬜ Not started |
+| 9 | Verify (traffic → `index=cloudfront`) | 🟡 Runbook ready — manual verification |
 | 10 | (Optional) WAF + CloudTrail | ⬜ Not started |
 
 Legend: ⬜ Not started · 🟡 In progress · ✅ Done
@@ -97,3 +97,9 @@ Legend: ⬜ Not started · 🟡 In progress · ✅ Done
 - **IAM fix (corrects Step 6):** added `sqs:ListQueues` (resource `*`) to `jhuk-tech-splunk-ingest` in `infra/iam.tf`. The add-on calls ListQueues during input creation (known `AccessDenied for sqs:listqueues` otherwise); it can't be ARN-scoped but only exposes queue names/URLs, not contents. Applies live (no instance replace).
 - Validated: `terraform fmt -check -recursive` clean, `terraform validate` → Success.
 - **Next up: step 9 — verify** (generate traffic → confirm parsed events in `index=cloudfront`; build starter searches) once the maintainer has applied infra + blog-migration #33 and run the runbook.
+
+### 2026-06-29 — Step 9: verification runbook (docs)
+- Wrote `docs/step-9-verify.md`: confirm-events search, field-extraction sanity check, and starter SPL (top paths, status breakdown, 4xx/5xx timechart, cache hit ratio via eventstats, top IPs, edge locations, bandwidth, slowest requests). Add-on field names are underscore form (`c_ip`, `cs_uri_stem`, `sc_status`, `x_edge_result_type`, `time_taken`, `sc_bytes`, …).
+- Pipeline-health checks (ingest lag, `_internal source=*splunk_ta_aws*` errors, SQS/DLQ depth) and the **EBS-persistence test** (container restart = quick; instance replacement = full proof that data lives on the EBS volume).
+- Phase-1 definition-of-done checklist: events within minutes, fields extracted, survives restart, no static creds.
+- Docs only; no infra. **Roadmap code/docs all complete through Step 9.** Remaining is operational (maintainer): apply Steps 4–6, apply blog-migration #33, run Step 8 runbook, then verify with Step 9. Step 10 (WAF→HEC + CloudTrail) is optional/future.
