@@ -103,6 +103,18 @@ data "aws_iam_policy_document" "splunk_ingest" {
     resources = [aws_sqs_queue.cf_logs.arn]
   }
 
+  # The Splunk Add-on for AWS calls sqs:ListQueues when you create/validate an
+  # SQS-Based S3 input (it enumerates queues to resolve the one you picked).
+  # ListQueues has no resource-level scoping in IAM — it's account-wide or
+  # nothing — but it only exposes queue NAMES/URLs, not message contents. We
+  # accept that narrow exception so input creation doesn't fail with AccessDenied.
+  statement {
+    sid       = "ListQueuesForAddonInputSetup"
+    effect    = "Allow"
+    actions   = ["sqs:ListQueues"]
+    resources = ["*"]
+  }
+
   # Fetch the gzip log object a message points to. GetObject is per-object;
   # ListBucket + GetBucketLocation are bucket-level, so they target the bucket
   # ARN itself rather than the /* object path.

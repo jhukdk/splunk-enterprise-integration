@@ -13,7 +13,7 @@ Running log of completed roadmap steps. Append a short, dated note as each step 
 | 5 | Ingestion plumbing (S3 → SNS → SQS + DLQ) | 🟡 Code complete — not applied |
 | 6 | Instance role (least-privilege IAM + SSM) | 🟡 Code complete — not applied |
 | 7 | blog-migration PR (`logging_config`) | 🟡 PR proposed (blog-migration #33) |
-| 8 | Configure Splunk (AWS add-on, index, input) | ⬜ Not started |
+| 8 | Configure Splunk (AWS add-on, index, input) | 🟡 Runbook ready — manual UI step |
 | 9 | Verify (traffic → `index=cloudfront`) | ⬜ Not started |
 | 10 | (Optional) WAF + CloudTrail | ⬜ Not started |
 
@@ -89,3 +89,11 @@ Legend: ⬜ Not started · 🟡 In progress · ✅ Done
 - ⚠️ **Apply order:** apply THIS repo first (so the logs bucket exists with ACLs + awslogsdelivery grant), then apply blog-migration #33. Logs land under the `cloudfront/` prefix; our S3 notification filters on `.gz` so the prefix is harmless.
 - Reminder of unapplied infra in THIS repo before logs can flow: Steps 4 (logs bucket), 5 (SNS/SQS/DLQ), 6 (role ingest policy) are merged to `main` but **not yet `terraform apply`-ed**. Apply them, then merge+apply blog-migration #33, then do Step 8.
 - **Next up: step 8 — configure Splunk** (install Splunk Add-on for AWS, create `index=cloudfront`, add the SQS-Based S3 input pointing at `sqs_queue_url`).
+
+### 2026-06-29 — Step 8: configure-Splunk runbook + IAM ListQueues fix (code/docs; manual UI step is the maintainer's)
+- Wrote `docs/step-8-configure-splunk.md`: click-by-click for installing the Splunk Add-on for AWS, creating `index=cloudfront`, and adding the **CloudFront Access Log → SQS-Based S3** input. Verified the flow against the add-on's github.io docs.
+- **Auth = EC2 instance role, keyless:** the add-on **auto-discovers** the attached role and shows it under Configuration → Account → *Autodiscovered IAM Role*; you select `jhuk-tech-splunk-role` in the input. No keys, no assume-role.
+- Input specifics: S3 File Decoder `CloudFrontAccessLogs` → sourcetype `aws:cloudfront:accesslogs`, region us-east-1, SQS Queue = `sqs_queue_url`, index `cloudfront`, interval 300. **SNS Signature Validation must stay UNCHECKED** because our subscription uses `raw_message_delivery=true` (SQS body is the raw S3 event, no SNS signature).
+- **IAM fix (corrects Step 6):** added `sqs:ListQueues` (resource `*`) to `jhuk-tech-splunk-ingest` in `infra/iam.tf`. The add-on calls ListQueues during input creation (known `AccessDenied for sqs:listqueues` otherwise); it can't be ARN-scoped but only exposes queue names/URLs, not contents. Applies live (no instance replace).
+- Validated: `terraform fmt -check -recursive` clean, `terraform validate` → Success.
+- **Next up: step 9 — verify** (generate traffic → confirm parsed events in `index=cloudfront`; build starter searches) once the maintainer has applied infra + blog-migration #33 and run the runbook.
