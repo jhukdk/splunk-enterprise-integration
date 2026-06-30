@@ -47,3 +47,23 @@ output "logs_bucket_domain_name" {
   description = "Regional domain name of the logs bucket (the bucket target CloudFront logging_config expects)."
   value       = aws_s3_bucket.logs.bucket_domain_name
 }
+
+output "sns_topic_arn" {
+  description = "ARN of the SNS topic S3 publishes ObjectCreated events to."
+  value       = aws_sns_topic.cf_logs.arn
+}
+
+output "sqs_queue_url" {
+  description = "URL of the main SQS queue — this is what the Splunk SQS-Based S3 input polls (Step 8)."
+  value       = aws_sqs_queue.cf_logs.url
+}
+
+output "sqs_queue_arn" {
+  description = "ARN of the main SQS queue — granted to the Splunk instance role in Step 6."
+  value       = aws_sqs_queue.cf_logs.arn
+}
+
+output "sqs_dlq_url" {
+  description = "URL of the dead-letter queue — check here for messages Splunk failed to process."
+  value       = aws_sqs_queue.dlq.url
+}
