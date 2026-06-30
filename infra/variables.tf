@@ -128,3 +128,15 @@ variable "cloudfront_log_delivery_canonical_id" {
   type        = string
   default     = "c4c1ede66af53448b93c283ce9448c4ba468c9432aa01d700d3878632f77d2d0"
 }
+
+# --- Step 5: ingestion plumbing ---------------------------------------------
+
+variable "sqs_max_receive_count" {
+  description = <<-EOT
+    How many times Splunk may fail to process a message before SQS moves it to
+    the dead-letter queue. 5 tolerates transient errors without trapping a
+    genuinely poison message in endless redelivery.
+  EOT
+  type        = number
+  default     = 5
+}

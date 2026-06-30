@@ -10,7 +10,7 @@ Running log of completed roadmap steps. Append a short, dated note as each step 
 | 2 | Networking (VPC / subnet / SG) | ✅ Done |
 | 3 | Splunk host (EC2 + gp3 EBS + Docker) | ✅ Applied — Splunk Web up |
 | 4 | Logs bucket (private S3 + ACL for CF) | 🟡 Code complete — not applied |
-| 5 | Ingestion plumbing (S3 → SNS → SQS + DLQ) | ⬜ Not started |
+| 5 | Ingestion plumbing (S3 → SNS → SQS + DLQ) | 🟡 Code complete — not applied |
 | 6 | Instance role (least-privilege IAM + SSM) | ⬜ Not started |
 | 7 | blog-migration PR (`logging_config`) | ⬜ Not started |
 | 8 | Configure Splunk (AWS add-on, index, input) | ⬜ Not started |
@@ -67,3 +67,12 @@ Legend: ⬜ Not started · 🟡 In progress · ✅ Done
 - New vars: `logs_bucket_name` (empty ⇒ derive), `logs_retention_days`, `cloudfront_log_delivery_canonical_id`. New outputs: `logs_bucket_name`, `logs_bucket_arn`, `logs_bucket_domain_name` (the last feeds blog-migration's `logging_config` in Step 7).
 - Validated: `terraform fmt -check -recursive` clean, `terraform validate` → Success. **Nothing applied.** S3 cost is negligible; no ports/SG changes; doesn't touch blog-migration.
 - **Next up: step 5 — ingestion plumbing** (S3 ObjectCreated → SNS → SQS + DLQ, with the resource policies wiring each hop).
+
+### 2026-06-29 — Step 5: ingestion plumbing (code complete, NOT applied)
+- Added `infra/notifications.tf`: the `S3 ObjectCreated(.gz) → SNS → SQS (+ DLQ)` path. Each SQS message is a POINTER; Splunk's SQS-Based S3 input polls the queue then fetches the gzip from S3.
+- **SNS topic** `jhuk-tech-cf-logs-events` (unencrypted on purpose — SSE-KMS would need S3 `kms:GenerateDataKey`; messages are pointers not log data) + topic policy letting **only** s3.amazonaws.com publish, scoped via `aws:SourceArn`=bucket and `aws:SourceAccount`.
+- **Main SQS** `jhuk-tech-cf-logs`: visibility 300s, long-poll 20s, retention 4d, SQS-managed SSE, redrive → DLQ after `sqs_max_receive_count` (5). **DLQ** `jhuk-tech-cf-logs-dlq`: 14d retention, SSE, `redrive_allow_policy` restricting source to the main queue. Queue policy lets **only** sns.amazonaws.com (our topic via `aws:SourceArn`) `SendMessage`.
+- **Subscription** SNS→SQS with `raw_message_delivery = true` (SQS body = native S3 event, the canonical Splunk shape; flip to false in Step 8 if the SNS wrapper is wanted). **`aws_s3_bucket_notification`** topic block on `s3:ObjectCreated:*` + `filter_suffix=".gz"`, `depends_on` the topic policy (S3 validates publish perms at create time).
+- New var `sqs_max_receive_count` (5). New outputs: `sns_topic_arn`, `sqs_queue_url`, `sqs_queue_arn` (→ Step 6 IAM), `sqs_dlq_url`.
+- Validated: `terraform fmt -check -recursive` clean, `terraform validate` → Success. **Nothing applied.** SNS/SQS at this volume is effectively free; no ports/SG; doesn't touch blog-migration.
+- **Next up: step 6 — instance role** (extend the existing `jhuk-tech-splunk-role` with least-privilege SQS-consume on the main queue + S3 read on the logs bucket).
