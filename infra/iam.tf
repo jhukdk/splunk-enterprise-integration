@@ -78,3 +78,54 @@ resource "aws_iam_instance_profile" "splunk" {
   name = "${var.project}-splunk-profile"
   role = aws_iam_role.splunk.name
 }
+
+# ---------------------------------------------------------------------------
+# Step 6: ingest permissions — extend the SAME role so the Splunk Add-on for
+# AWS can drain the SQS queue and read the log objects it points to.
+#
+# Least privilege in practice: scoped to the EXACT queue ARN and bucket ARN and
+# to the minimal actions, not sqs:* / s3:* on "*". Read-only on S3 (Splunk never
+# writes back), no DLQ access (it only consumes the live queue), no reach into
+# the blog's content bucket. No kms:Decrypt — the bucket is SSE-S3, not KMS.
+# ---------------------------------------------------------------------------
+data "aws_iam_policy_document" "splunk_ingest" {
+  # Poll the queue, then delete each message once the object is indexed.
+  statement {
+    sid    = "ConsumeCloudFrontQueue"
+    effect = "Allow"
+    actions = [
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:ChangeMessageVisibility",
+      "sqs:GetQueueAttributes",
+      "sqs:GetQueueUrl",
+    ]
+    resources = [aws_sqs_queue.cf_logs.arn]
+  }
+
+  # Fetch the gzip log object a message points to. GetObject is per-object;
+  # ListBucket + GetBucketLocation are bucket-level, so they target the bucket
+  # ARN itself rather than the /* object path.
+  statement {
+    sid       = "ReadLogObjects"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.logs.arn}/*"]
+  }
+
+  statement {
+    sid    = "ListLogsBucket"
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket",
+      "s3:GetBucketLocation",
+    ]
+    resources = [aws_s3_bucket.logs.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "splunk_ingest" {
+  name   = "${var.project}-splunk-ingest"
+  role   = aws_iam_role.splunk.id
+  policy = data.aws_iam_policy_document.splunk_ingest.json
+}
