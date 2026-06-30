@@ -12,7 +12,7 @@ Running log of completed roadmap steps. Append a short, dated note as each step 
 | 4 | Logs bucket (private S3 + ACL for CF) | 🟡 Code complete — not applied |
 | 5 | Ingestion plumbing (S3 → SNS → SQS + DLQ) | 🟡 Code complete — not applied |
 | 6 | Instance role (least-privilege IAM + SSM) | 🟡 Code complete — not applied |
-| 7 | blog-migration PR (`logging_config`) | ⬜ Not started |
+| 7 | blog-migration PR (`logging_config`) | 🟡 PR proposed (blog-migration #33) |
 | 8 | Configure Splunk (AWS add-on, index, input) | ⬜ Not started |
 | 9 | Verify (traffic → `index=cloudfront`) | ⬜ Not started |
 | 10 | (Optional) WAF + CloudTrail | ⬜ Not started |
@@ -83,3 +83,9 @@ Legend: ⬜ Not started · 🟡 In progress · ✅ Done
 - Validated: `terraform fmt -check -recursive` clean, `terraform validate` → Success. **Nothing applied.** Free; no ports/SG; doesn't touch blog-migration.
 - After this, the full pull pipeline is permission-complete; it just needs CloudFront to actually write logs (Step 7) and the Splunk-side input configured (Step 8).
 - **Next up: step 7 — blog-migration PR** (add `logging_config` to the CloudFront distribution → this repo's logs bucket; separate repo, maintainer applies).
+
+### 2026-06-29 — Step 7: blog-migration logging PR proposed
+- Opened **blog-migration PR #33** (`feat/cloudfront-access-logging`) — the one coordinated cross-repo change. Adds a `logging_config` block to `aws_cloudfront_distribution.this`: `bucket = "${var.cf_logs_bucket_name}.s3.amazonaws.com"` (the bucket DOMAIN, not bare name), `include_cookies = false`, `prefix = "cloudfront/"`. New var `cf_logs_bucket_name` default `jhuk-tech-cf-logs-877995959706` (matches this repo's deterministic name). `fmt` + `validate` clean there; nothing applied (maintainer applies per blog-migration rules).
+- ⚠️ **Apply order:** apply THIS repo first (so the logs bucket exists with ACLs + awslogsdelivery grant), then apply blog-migration #33. Logs land under the `cloudfront/` prefix; our S3 notification filters on `.gz` so the prefix is harmless.
+- Reminder of unapplied infra in THIS repo before logs can flow: Steps 4 (logs bucket), 5 (SNS/SQS/DLQ), 6 (role ingest policy) are merged to `main` but **not yet `terraform apply`-ed**. Apply them, then merge+apply blog-migration #33, then do Step 8.
+- **Next up: step 8 — configure Splunk** (install Splunk Add-on for AWS, create `index=cloudfront`, add the SQS-Based S3 input pointing at `sqs_queue_url`).
