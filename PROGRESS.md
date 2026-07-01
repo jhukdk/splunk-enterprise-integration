@@ -13,8 +13,8 @@ Running log of completed roadmap steps. Append a short, dated note as each step 
 | 5 | Ingestion plumbing (S3 → SNS → SQS + DLQ) | ✅ Applied |
 | 6 | Instance role (least-privilege IAM + SSM) | ✅ Applied |
 | 7 | blog-migration PR (`logging_config`) | ✅ Merged + applied (blog-migration #33) |
-| 8 | Configure Splunk (AWS add-on, index, input) | 🟡 **NEXT — manual UI step (not done)** |
-| 9 | Verify (traffic → `index=cloudfront`) | ⬜ After Step 8 |
+| 8 | Configure Splunk (AWS add-on, index, input) | ✅ Done — add-on installed, input draining SQS |
+| 9 | Verify (traffic → `index=cloudfront`) | ✅ Done — 2,160 events, fields extracted |
 | 10 | (Optional) WAF + CloudTrail | ⬜ Not started |
 
 Legend: ⬜ Not started · 🟡 In progress · ✅ Done
@@ -110,3 +110,10 @@ Legend: ⬜ Not started · 🟡 In progress · ✅ Done
 - **Pipeline proven through SQS:** a real log object landed (`cloudfront/EBSGZL0OM8XYI.2026-06-30-00.*.gz`) and a message is sitting in the main queue (DLQ empty) — `S3 → SNS → SQS` works end to end.
 - **➡️ NEXT (manual, not done):** run `docs/step-8-configure-splunk.md` in Splunk Web — install the Splunk Add-on for AWS, create `index=cloudfront`, add the CloudFront Access Log → SQS-Based S3 input (auth = auto-discovered EC2 role; SQS `jhuk-tech-cf-logs`; SNS Signature Validation **off**). The new instance currently has **no add-on, no `cloudfront` index, no input** — which is why the queued message is unconsumed. Then verify via `docs/step-9-verify.md`.
 - Also open elsewhere: **blog-migration PR #34** — a hiring-manager blog post about this architecture (`draft:false`, publishes on merge).
+
+### 2026-06-30 — Steps 8 & 9 complete: CloudFront logs flowing into Splunk (phase-1 DoD met)
+- Verified on the live host (`i-0b281283ba85f2793`, `98.84.33.4`) that Step 8 already ran successfully: `Splunk_TA_aws` add-on installed, `index=cloudfront` populated, SQS-Based S3 input draining the queue.
+- **CloudWatch confirmed the input's first poll:** at ~22:35 local the queue went 154 messages Received → 154 Deleted in one burst (backlog drain); queue has stayed at 0 since (DLQ empty), keeping pace with the ~3–8 objects/hr CloudFront delivers.
+- **Step 9 verification:** `index=cloudfront` has **2,160 events** (latest current, `~03:29 GMT`); **2,006** have `sc_status` extracted (the ~154 unparsed are the `#Version`/`#Fields` header lines each CloudFront `.gz` carries). Fields resolve: `c_ip`, `cs_uri_stem`, `sc_status`, `x_edge_result_type`. Status mix: 301 (38%), 403 (31%), 404, 200, 304, 206 — the 403s hitting `/1ark.php`, `/a17.php` are bot vuln-scans (early security signal).
+- **Phase-1 definition of done met:** searchable field-extracted CloudFront events in `index=cloudfront`; EBS persistence proven across the earlier instance replacement; zero static AWS creds (auto-discovered instance role).
+- **Next up:** nothing required. Optional **Step 10** (WAF logs via Firehose → HEC, CloudTrail via the same SQS path) remains as a future/optional phase.
