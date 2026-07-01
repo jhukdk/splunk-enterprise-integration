@@ -90,7 +90,10 @@ resource "aws_sqs_queue" "cf_logs" {
   # which cuts empty receives (and cost) without adding real latency.
   receive_wait_time_seconds = 20
 
-  message_retention_seconds = 345600 # 4 days
+  # 14 days (SQS max). This is the ceiling on how long the Splunk instance can be
+  # stopped (for cost savings) before unprocessed pointers expire and their log
+  # objects are silently never ingested.
+  message_retention_seconds = 1209600 # 14 days
 
   sqs_managed_sse_enabled = true
 
